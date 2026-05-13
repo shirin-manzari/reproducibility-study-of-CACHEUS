@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+data/
+work/
+results/
+
+# Local notes and papers
+*.md
+*.pdf
+!README.md
