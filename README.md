@@ -78,7 +78,7 @@ Curated results are stored in `results/cloudvps/`, including:
 - `cacheus_vs_baselines.csv`
 - `cacheus_delta_summary.csv`
 - `conversion_summary.csv`
-- `figures/*.png`
+- `figures/*.png` for hit-rate, runtime, heatmap, and CACHEUS-vs-baseline plots
 
 In this CloudVPS-only reproduction, CACHEUS performs strongly against LRU, LFU,
 ARC, and LeCaR, and is nearly tied with LIRS overall.

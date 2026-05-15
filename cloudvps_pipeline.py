@@ -466,6 +466,12 @@ def plot(rows, deltas, out_dir):
         zero_line=True,
     )
     plot_runtime(plt, rows, figures / "runtime_by_algorithm.png")
+    plot_mean_hit_rate_bar(plt, rows, figures / "mean_hit_rate_bar.png")
+    plot_hit_rate_heatmap(plt, rows, figures / "hit_rate_heatmap.png")
+    plot_cacheus_delta_heatmap(plt, deltas, figures / "cacheus_delta_heatmap.png")
+    plot_runtime_vs_hit_rate(plt, rows, figures / "runtime_vs_hit_rate.png")
+    plot_cacheus_vs_lirs(plt, rows, figures / "cacheus_vs_lirs.png")
+    plot_cacheus_delta_boxplot(plt, deltas, figures / "cacheus_delta_boxplot.png")
 
 
 def plot_lines(plt, rows, keys, value_key, path, ylabel, title, zero_line=False):
@@ -509,6 +515,178 @@ def plot_runtime(plt, rows, path):
     ax.set_xlabel("Algorithm")
     ax.set_ylabel("Total runtime (sec)")
     ax.set_title("CloudVPS runtime by algorithm")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def plot_mean_hit_rate_bar(plt, rows, path):
+    values = {}
+    for (algorithm,), items in grouped(rows, ["algorithm"]).items():
+        hit_rate = mean(fnum(row["hit_rate"]) for row in items)
+        if hit_rate is not None:
+            values[algorithm] = hit_rate
+    if not values:
+        return
+
+    labels = sorted(values, key=values.get, reverse=True)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    bars = ax.bar(labels, [values[label] for label in labels])
+    ax.set_xlabel("Algorithm")
+    ax.set_ylabel("Mean hit rate (%)")
+    ax.set_title("CloudVPS mean hit rate by algorithm")
+    ax.bar_label(bars, fmt="%.2f", padding=3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def plot_hit_rate_heatmap(plt, rows, path):
+    matrix, labels, columns = heatmap_matrix(rows, "algorithm", "cache_size_label", "hit_rate")
+    if not matrix:
+        return
+    plot_heatmap(
+        plt,
+        matrix,
+        labels,
+        columns,
+        path,
+        "Cache size fraction",
+        "Algorithm",
+        "Mean hit rate (%)",
+        "CloudVPS hit rate heatmap",
+    )
+
+
+def plot_cacheus_delta_heatmap(plt, deltas, path):
+    matrix, labels, columns = heatmap_matrix(deltas, "baseline_algorithm", "cache_size_label", "hit_rate_delta_pp")
+    if not matrix:
+        return
+    plot_heatmap(
+        plt,
+        matrix,
+        labels,
+        columns,
+        path,
+        "Cache size fraction",
+        "Baseline algorithm",
+        "CACHEUS delta (percentage points)",
+        "CACHEUS delta heatmap",
+        center_zero=True,
+    )
+
+
+def heatmap_matrix(rows, row_key, column_key, value_key):
+    labels = sorted({row[row_key] for row in rows})
+    columns = sorted({row[column_key] for row in rows}, key=lambda value: fnum(value) or 0)
+    if not labels or not columns:
+        return [], [], []
+
+    values = {}
+    for row_label in labels:
+        for column_label in columns:
+            cell_rows = [
+                row
+                for row in rows
+                if row[row_key] == row_label and row[column_key] == column_label
+            ]
+            values[(row_label, column_label)] = mean(fnum(row[value_key]) for row in cell_rows)
+
+    matrix = []
+    for row_label in labels:
+        matrix.append([values[(row_label, column_label)] for column_label in columns])
+    return matrix, labels, columns
+
+
+def plot_heatmap(plt, matrix, labels, columns, path, xlabel, ylabel, color_label, title, center_zero=False):
+    import numpy as np
+
+    data = np.array([[value if value is not None else np.nan for value in row] for row in matrix], dtype=float)
+    cmap = "RdBu_r" if center_zero else "viridis"
+    kwargs = {}
+    if center_zero and np.isfinite(data).any():
+        limit = np.nanmax(np.abs(data))
+        kwargs = {"vmin": -limit, "vmax": limit}
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    image = ax.imshow(data, aspect="auto", cmap=cmap, **kwargs)
+    ax.set_xticks(range(len(columns)))
+    ax.set_xticklabels(columns)
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+
+    for y, row in enumerate(data):
+        for x, value in enumerate(row):
+            if np.isfinite(value):
+                ax.text(x, y, f"{value:.2f}", ha="center", va="center", color="white", fontsize=8)
+
+    colorbar = fig.colorbar(image, ax=ax)
+    colorbar.set_label(color_label)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def plot_runtime_vs_hit_rate(plt, rows, path):
+    points = []
+    for (algorithm,), items in grouped(rows, ["algorithm"]).items():
+        hit_rate = mean(fnum(row["hit_rate"]) for row in items)
+        runtime = sum(fnum(row["runtime_sec"]) or 0 for row in items)
+        if hit_rate is not None and runtime:
+            points.append((algorithm, runtime, hit_rate))
+    if not points:
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter([runtime for _, runtime, _ in points], [hit_rate for _, _, hit_rate in points], s=60)
+    for algorithm, runtime, hit_rate in points:
+        ax.annotate(algorithm, (runtime, hit_rate), textcoords="offset points", xytext=(5, 5))
+    ax.set_xlabel("Total runtime (sec)")
+    ax.set_ylabel("Mean hit rate (%)")
+    ax.set_title("CloudVPS runtime vs hit rate")
+    ax.grid(True, linestyle=":", linewidth=0.5)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def plot_cacheus_vs_lirs(plt, rows, path):
+    selected = [row for row in rows if row["algorithm"].lower() in ("cacheus", "lirs")]
+    if not selected:
+        return
+    plot_lines(
+        plt,
+        selected,
+        ["algorithm", "cache_size_label"],
+        "hit_rate",
+        path,
+        "Mean hit rate (%)",
+        "CACHEUS vs LIRS on CloudVPS",
+    )
+
+
+def plot_cacheus_delta_boxplot(plt, deltas, path):
+    series = []
+    labels = []
+    for (baseline,), items in sorted(grouped(deltas, ["baseline_algorithm"]).items()):
+        values = [fnum(row["hit_rate_delta_pp"]) for row in items]
+        values = [value for value in values if value is not None]
+        if values:
+            labels.append(baseline)
+            series.append(values)
+    if not series:
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.boxplot(series, labels=labels, showmeans=True)
+    ax.set_xlabel("Baseline algorithm")
+    ax.set_ylabel("CACHEUS delta (percentage points)")
+    ax.set_title("CACHEUS delta distribution by baseline")
+    ax.grid(True, axis="y", linestyle=":", linewidth=0.5)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)

@@ -13,7 +13,17 @@ Included files:
 - `cacheus_vs_baselines.csv`: per-trace CACHEUS hit-rate deltas against each
   baseline algorithm.
 - `cacheus_delta_summary.csv`: grouped CACHEUS-vs-baseline delta summaries.
-- `figures/*.png`: plots generated from the CSV results.
+- `figures/hit_rate_vs_cache_size.png`: mean hit rate by cache size.
+- `figures/cacheus_delta_vs_baselines.png`: CACHEUS hit-rate delta against each
+  baseline by cache size.
+- `figures/runtime_by_algorithm.png`: total simulator runtime by algorithm.
+- `figures/mean_hit_rate_bar.png`: overall mean hit rate comparison.
+- `figures/hit_rate_heatmap.png`: algorithm/cache-size mean hit-rate heatmap.
+- `figures/cacheus_delta_heatmap.png`: CACHEUS-vs-baseline delta heatmap.
+- `figures/runtime_vs_hit_rate.png`: runtime and hit-rate tradeoff.
+- `figures/cacheus_vs_lirs.png`: focused CACHEUS and LIRS comparison.
+- `figures/cacheus_delta_boxplot.png`: distribution of CACHEUS deltas by
+  baseline.
 
 Large or machine-specific outputs are intentionally not tracked, including raw
 trace data, decoded traces, converted `.blk` files, full simulator raw output,
