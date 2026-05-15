@@ -1,173 +1,90 @@
 # Reproducibility Study of CACHEUS on CloudVPS
 
-This repository is an academic reproducibility study for the CACHEUS cache
-replacement work from FAST 2021. It keeps the original simulator and algorithm
-implementations, then adds an offline CloudVPS-only pipeline that prepares local
-block traces, runs CACHEUS and baseline policies, and writes summary artifacts
-for comparison.
+This repository is an academic reproducibility study based on the original
+[CACHEUS](https://github.com/sylab/cacheus) cache replacement project from FAST
+2021. It keeps the original simulator and algorithms, then adds a focused
+CloudVPS-only pipeline for preparing traces, running experiments, and generating
+summary results.
 
-The goal is not to publish a new cache policy. The goal is to make a focused,
-repeatable experiment path that can be used for coursework, replication, and
-analysis of the CACHEUS results on the public CloudVPS trace family.
+## Scope
 
-## What Is Included
-
-- `code/run.py`: the simulator entry point used to execute cache replacement
-  algorithms over trace files.
-- `code/algs/`: implementations of CACHEUS and baseline policies, including
-  LRU, LFU, ARC, LIRS, LeCaR, and CACHEUS.
-- `cloudvps_pipeline.py`: an offline pipeline for CloudVPS traces. It extracts
-  local archives, decodes blktrace files with `blkparse`, converts them to the
-  simulator's `.blk` format, runs experiments, and generates CSV summaries and
-  figures.
-- `code/algs/lib/traces.py`: simplified for this study so the simulator only
-  accepts converted CloudVPS/VISA-style `.blk` traces.
-
-Local datasets, generated work files, results, papers, and private notes are
-ignored by git. This keeps the repository focused on reproducible code rather
-than large trace archives or machine-specific outputs.
-
-## Experiment Scope
-
-The CloudVPS pipeline currently runs:
+This study evaluates:
 
 - Algorithms: `lru`, `lfu`, `arc`, `lirs`, `lecar`, `cacheus`
-- Cache size fractions: `0.001`, `0.005`, `0.01`, `0.05`, `0.1`
-- Cache size basis: unique request count
-- Blktrace event filter: `Q` events
-- Trace input format: CloudVPS `vps*.tar.gz` archives or extracted `vps*`
-  directories containing a matching `.blktrace.0` file
+- Cache sizes: `0.001`, `0.005`, `0.01`, `0.05`, `0.1` of unique requests
+- Dataset: public CloudVPS traces only
 
-This is a narrowed reproduction setup. Other original trace readers and the old
-visualization entry points were removed from this version to keep the academic
-study centered on CloudVPS.
+This is not a full reproduction of every dataset in the original paper. It is a
+smaller academic reproduction focused on the CloudVPS workload.
+
+## Repository Contents
+
+- `code/run.py`: simulator entry point.
+- `code/algs/`: CACHEUS and baseline cache replacement algorithms.
+- `cloudvps_pipeline.py`: offline CloudVPS reproduction pipeline.
+- `results/cloudvps/`: curated summary CSVs and figures from the reproduction.
+
+Raw traces, decoded traces, intermediate work files, and full logs are not
+tracked in git.
 
 ## Requirements
 
 - Python 3
 - `numpy`
 - `matplotlib`
-- Linux `blkparse` from the `blktrace` tools
+- `blkparse` from Linux `blktrace` tools
 
-On Debian/Ubuntu systems, `blkparse` is usually provided by:
-
-```bash
-sudo apt-get install blktrace
-```
-
-Python dependencies can be installed in your preferred environment:
+Install Python dependencies:
 
 ```bash
 pip install numpy matplotlib
 ```
 
-The pipeline can be launched from Windows, WSL, or Linux, but the trace decoding
-step requires `blkparse` to be available on `PATH`.
+On Debian/Ubuntu:
 
-## Preparing CloudVPS Traces
+```bash
+sudo apt-get install blktrace
+```
 
-Download the CloudVPS traces from the public trace source referenced in the
-CACHEUS paper, then place the archives under:
+## Run
+
+Place CloudVPS `vps*.tar.gz` archives, or extracted `vps*` directories, under:
 
 ```text
 data/cloudvps_raw/
 ```
 
-Expected examples:
-
-```text
-data/cloudvps_raw/vps1.tar.gz
-data/cloudvps_raw/vps2.tar.gz
-```
-
-The pipeline also accepts already extracted `vps*` directories if they contain a
-single usable `.blktrace.0` file.
-
-## Running the CloudVPS Pipeline
-
-From the repository root, run:
+Then run:
 
 ```bash
 python cloudvps_pipeline.py
 ```
 
-Optional paths can be overridden:
+Optional custom paths:
 
 ```bash
-python cloudvps_pipeline.py \
-  --raw-dir data/cloudvps_raw \
-  --work-dir work/cloudvps \
-  --out-dir results/cloudvps
+python cloudvps_pipeline.py --raw-dir data/cloudvps_raw --work-dir work/cloudvps --out-dir results/cloudvps
 ```
 
-The pipeline performs these steps:
+The pipeline extracts traces, decodes `.blktrace.0` files with `blkparse`,
+converts them to `.blk`, runs the simulator, and writes CSV summaries and plots.
 
-1. Finds local `vps*.tar.gz` archives or extracted `vps*` directories.
-2. Safely extracts archives into the work directory.
-3. Decodes `.blktrace.0` files using `blkparse`.
-4. Converts decoded events into `.blk` files readable by the simulator.
-5. Writes an internal JSON config for `code/run.py`.
-6. Runs the selected algorithms and cache sizes.
-7. Produces raw results, summaries, CACHEUS-vs-baseline deltas, and figures.
+## Results
 
-## Outputs
+Curated results are stored in `results/cloudvps/`, including:
 
-By default, results are written to:
+- `summary_by_algorithm.csv`
+- `summary_by_cache_size.csv`
+- `cacheus_vs_baselines.csv`
+- `cacheus_delta_summary.csv`
+- `conversion_summary.csv`
+- `figures/*.png`
 
-```text
-results/cloudvps/
-```
-
-Important outputs include:
-
-- `conversion_summary.csv`: trace conversion counts and skipped-line totals.
-- `cloudvps_runner.log`: full simulator output.
-- `cloudvps_results_raw.csv`: raw simulator rows.
-- `cloudvps_results.csv`: raw rows with explicit column headers.
-- `summary_by_algorithm.csv`: aggregate hit-rate and runtime summary per
-  algorithm.
-- `summary_by_cache_size.csv`: mean hit rate per algorithm and cache size.
-- `cacheus_vs_baselines.csv`: per-trace CACHEUS deltas against each baseline.
-- `cacheus_delta_summary.csv`: mean CACHEUS deltas grouped by baseline and cache
-  size.
-- `figures/hit_rate_vs_cache_size.png`
-- `figures/cacheus_delta_vs_baselines.png`
-- `figures/runtime_by_algorithm.png`
-
+In this CloudVPS-only reproduction, CACHEUS performs strongly against LRU, LFU,
+ARC, and LeCaR, and is nearly tied with LIRS overall.
 
 ## References
 
-The relevant paper to cite for CACHEUS is:
-
-```bibtex
-@inproceedings {cacheus-fast21,
-author = {Liana V. Rodriguez and Farzana Yusuf and Steven Lyons and Eysler Paz and Raju Rangaswami and Jason Liu and Ming Zhao and Giri Narasimhan},
-title = {Learning Cache Replacement with {CACHEUS}},
-booktitle = {19th {USENIX} Conference on File and Storage Technologies ({FAST} 21)},
-year = {2021},
-url = {https://www.usenix.org/conference/fast21/presentation/valdes},
-publisher = {{USENIX} Association},
-month = February,
-}
-```
-
-The relevant paper to cite for LeCaR is:
-
-```bibtex
-@inproceedings {lecar-hotstorage19,
-author = {Giuseppe Vietri and Liana V. Rodriguez and Wendy A. Martinez and Steven Lyons and Jason Liu and Raju Rangaswami and Ming Zhao and Giri Narasimhan},
-title = {Driving Cache Replacement with ML-based LeCaR},
-booktitle = {10th {USENIX} Workshop on Hot Topics in Storage and File Systems (HotStorage 18)},
-year = {2018},
-address = {Boston, MA},
-url = {https://www.usenix.org/conference/hotstorage18/presentation/vietri},
-publisher = {{USENIX} Association},
-month = July,
-}
-```
-
-## Acknowledgments
-
-This study builds on the CACHEUS project code and related cache replacement
-algorithm implementations. The original project acknowledges Song Jiang for
-sharing LIRS code that was adapted to Python for comparative evaluation.
+- Rodriguez et al., **Learning Cache Replacement with CACHEUS**, FAST 2021.
+- Vietri et al., **Driving Cache Replacement with ML-based LeCaR**, HotStorage
+  2018.
