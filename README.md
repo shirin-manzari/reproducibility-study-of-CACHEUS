@@ -1,37 +1,162 @@
-## This repository contains the code used in the Cacheus Project
+# Reproducibility Study of CACHEUS on CloudVPS
 
-All caching algorithm implementations are located in the code/algs folder. These implementation were done using original code shared by the authors when possible or provided the correspoding publication. Examples of such policies are LIRS, ARC and DLIRS which cover state-of-the-art algorithms for caching.
+This repository is an academic reproducibility study for the CACHEUS cache
+replacement work from FAST 2021. It keeps the original simulator and algorithm
+implementations, then adds an offline CloudVPS-only pipeline that prepares local
+block traces, runs CACHEUS and baseline policies, and writes summary artifacts
+for comparison.
 
-### What is Cacheus?
+The goal is not to publish a new cache policy. The goal is to make a focused,
+repeatable experiment path that can be used for coursework, replication, and
+analysis of the CACHEUS results on the public CloudVPS trace family.
 
-Cacheus is a novel cache replacement algorithms designed for paging domain. This strategy is an evolution of the ML-based algorithm LeCaR which achieves good performance when cache sizes are small relative to the working set.
+## What Is Included
 
-### How to run experiments?
+- `code/run.py`: the simulator entry point used to execute cache replacement
+  algorithms over trace files.
+- `code/algs/`: implementations of CACHEUS and baseline policies, including
+  LRU, LFU, ARC, LIRS, LeCaR, and CACHEUS.
+- `cloudvps_pipeline.py`: an offline pipeline for CloudVPS traces. It extracts
+  local archives, decodes blktrace files with `blkparse`, converts them to the
+  simulator's `.blk` format, runs experiments, and generates CSV summaries and
+  figures.
+- `code/algs/lib/traces.py`: simplified for this study so the simulator only
+  accepts converted CloudVPS/VISA-style `.blk` traces.
 
-To run experiments, the configuration file can be modified appropriately with the specific parameters such as input file location, cache size, algorithm and dataset name.
-The next step is executing the following command in the console:
+Local datasets, generated work files, results, papers, and private notes are
+ignored by git. This keeps the repository focused on reproducible code rather
+than large trace archives or machine-specific outputs.
 
-```python3 run.py example.config```
+## Experiment Scope
 
-This framework also allows you to generate detailed graphs to visualize the internal state of the algorithms, as well as the hit rate over time and the access patterns of the workload using this command:
+The CloudVPS pipeline currently runs:
 
-```python3 visual.py visual.config```
+- Algorithms: `lru`, `lfu`, `arc`, `lirs`, `lecar`, `cacheus`
+- Cache size fractions: `0.001`, `0.005`, `0.01`, `0.05`, `0.1`
+- Cache size basis: unique request count
+- Blktrace event filter: `Q` events
+- Trace input format: CloudVPS `vps*.tar.gz` archives or extracted `vps*`
+  directories containing a matching `.blktrace.0` file
 
-### Where to find the traces?
+This is a narrowed reproduction setup. Other original trace readers and the old
+visualization entry points were removed from this version to keep the academic
+study centered on CloudVPS.
 
-Summary of the workloads used in the paper:
+## Requirements
 
-1. [FIU SRC_Map](http://iotta.snia.org/traces/block-io/414) (All traces are a one-day duration).
-2. [MSR Cambridge](http://iotta.snia.org/traces/block-io/388) (These traces are a one-week duration per file. For the paper, we extracted the first day only based on the timestamp).
-3. [CloudVPS](http://visa.lab.asu.edu/web/resources/traces/traces-cloudvps/) (All traces are a one-day duration).
-4. CloudCache is a collection of the [webserver](http://visa.lab.asu.edu/web/resources/traces/traces-webserver/) and [moodle](http://visa.lab.asu.edu/web/resources/traces/traces-moodle/) traces that were used in the [Cloudcache](https://www.usenix.org/conference/fast16/technical-sessions/presentation/arteaga) paper from FAST'16. (All one-day duration).
-5. CloudPhysics are non-public traces used in the [SHARDS](https://www.usenix.org/conference/fast15/technical-sessions/presentation/waldspurger) paper from FAST'15 that were shared directly from the authors. 
+- Python 3
+- `numpy`
+- `matplotlib`
+- Linux `blkparse` from the `blktrace` tools
 
-### References
+On Debian/Ubuntu systems, `blkparse` is usually provided by:
 
-* The relevant paper to cite for follow-up or related work on Cacheus is:
+```bash
+sudo apt-get install blktrace
+```
 
-``@inproceedings {cacheus-fast21,
+Python dependencies can be installed in your preferred environment:
+
+```bash
+pip install numpy matplotlib
+```
+
+The pipeline can be launched from Windows, WSL, or Linux, but the trace decoding
+step requires `blkparse` to be available on `PATH`.
+
+## Preparing CloudVPS Traces
+
+Download the CloudVPS traces from the public trace source referenced in the
+CACHEUS paper, then place the archives under:
+
+```text
+data/cloudvps_raw/
+```
+
+Expected examples:
+
+```text
+data/cloudvps_raw/vps1.tar.gz
+data/cloudvps_raw/vps2.tar.gz
+```
+
+The pipeline also accepts already extracted `vps*` directories if they contain a
+single usable `.blktrace.0` file.
+
+## Running the CloudVPS Pipeline
+
+From the repository root, run:
+
+```bash
+python cloudvps_pipeline.py
+```
+
+Optional paths can be overridden:
+
+```bash
+python cloudvps_pipeline.py \
+  --raw-dir data/cloudvps_raw \
+  --work-dir work/cloudvps \
+  --out-dir results/cloudvps
+```
+
+The pipeline performs these steps:
+
+1. Finds local `vps*.tar.gz` archives or extracted `vps*` directories.
+2. Safely extracts archives into the work directory.
+3. Decodes `.blktrace.0` files using `blkparse`.
+4. Converts decoded events into `.blk` files readable by the simulator.
+5. Writes an internal JSON config for `code/run.py`.
+6. Runs the selected algorithms and cache sizes.
+7. Produces raw results, summaries, CACHEUS-vs-baseline deltas, and figures.
+
+## Outputs
+
+By default, results are written to:
+
+```text
+results/cloudvps/
+```
+
+Important outputs include:
+
+- `conversion_summary.csv`: trace conversion counts and skipped-line totals.
+- `cloudvps_runner.log`: full simulator output.
+- `cloudvps_results_raw.csv`: raw simulator rows.
+- `cloudvps_results.csv`: raw rows with explicit column headers.
+- `summary_by_algorithm.csv`: aggregate hit-rate and runtime summary per
+  algorithm.
+- `summary_by_cache_size.csv`: mean hit rate per algorithm and cache size.
+- `cacheus_vs_baselines.csv`: per-trace CACHEUS deltas against each baseline.
+- `cacheus_delta_summary.csv`: mean CACHEUS deltas grouped by baseline and cache
+  size.
+- `figures/hit_rate_vs_cache_size.png`
+- `figures/cacheus_delta_vs_baselines.png`
+- `figures/runtime_by_algorithm.png`
+
+## Academic Notes
+
+For an academic report, describe this repository as a focused reproducibility
+study of CACHEUS on the CloudVPS workload, not as a full reproduction of every
+dataset in the original FAST 2021 paper. The current implementation depends on
+locally obtained traces and reproduces the experiment workflow using public
+CloudVPS data only.
+
+When reporting results, include:
+
+- the exact trace files used,
+- the machine and Python environment,
+- whether `blkparse` was run locally or inside WSL/Linux,
+- the cache size fractions,
+- the list of algorithms,
+- and the generated CSV/figure artifacts used for analysis.
+
+## References
+
+The relevant paper to cite for CACHEUS is:
+
+```bibtex
+@inproceedings {cacheus-fast21,
 author = {Liana V. Rodriguez and Farzana Yusuf and Steven Lyons and Eysler Paz and Raju Rangaswami and Jason Liu and Ming Zhao and Giri Narasimhan},
 title = {Learning Cache Replacement with {CACHEUS}},
 booktitle = {19th {USENIX} Conference on File and Storage Technologies ({FAST} 21)},
@@ -39,12 +164,13 @@ year = {2021},
 url = {https://www.usenix.org/conference/fast21/presentation/valdes},
 publisher = {{USENIX} Association},
 month = February,
-}``
+}
+```
 
+The relevant paper to cite for LeCaR is:
 
-* The relevant paper to cite for follow-up or related work on LeCaR is:
-
-``@inproceedings {lecar-hotstorage19,
+```bibtex
+@inproceedings {lecar-hotstorage19,
 author = {Giuseppe Vietri and Liana V. Rodriguez and Wendy A. Martinez and Steven Lyons and Jason Liu and Raju Rangaswami and Ming Zhao and Giri Narasimhan},
 title = {Driving Cache Replacement with ML-based LeCaR},
 booktitle = {10th {USENIX} Workshop on Hot Topics in Storage and File Systems (HotStorage 18)},
@@ -53,9 +179,11 @@ address = {Boston, MA},
 url = {https://www.usenix.org/conference/hotstorage18/presentation/vietri},
 publisher = {{USENIX} Association},
 month = July,
-}``
+}
+```
 
-### Acknowledgments
+## Acknowledgments
 
-Song Jiang shared the original code for LIRS that we adapted to Python and used for comparative evaluation.
-
+This study builds on the CACHEUS project code and related cache replacement
+algorithm implementations. The original project acknowledges Song Jiang for
+sharing LIRS code that was adapted to Python for comparative evaluation.
