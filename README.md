@@ -134,22 +134,6 @@ Important outputs include:
 - `figures/cacheus_delta_vs_baselines.png`
 - `figures/runtime_by_algorithm.png`
 
-## Academic Notes
-
-For an academic report, describe this repository as a focused reproducibility
-study of CACHEUS on the CloudVPS workload, not as a full reproduction of every
-dataset in the original FAST 2021 paper. The current implementation depends on
-locally obtained traces and reproduces the experiment workflow using public
-CloudVPS data only.
-
-When reporting results, include:
-
-- the exact trace files used,
-- the machine and Python environment,
-- whether `blkparse` was run locally or inside WSL/Linux,
-- the cache size fractions,
-- the list of algorithms,
-- and the generated CSV/figure artifacts used for analysis.
 
 ## References
 
