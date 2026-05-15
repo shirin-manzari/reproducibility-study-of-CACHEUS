@@ -130,9 +130,24 @@ dmypy.json
 
 data/
 work/
-results/
+
+# Generated experiment outputs are ignored by default. A small curated
+# CloudVPS result set is kept for the academic report/reproducibility summary.
+results/*
+!results/cloudvps/
+results/cloudvps/*
+!results/cloudvps/README.md
+!results/cloudvps/conversion_summary.csv
+!results/cloudvps/summary_by_algorithm.csv
+!results/cloudvps/summary_by_cache_size.csv
+!results/cloudvps/cacheus_vs_baselines.csv
+!results/cloudvps/cacheus_delta_summary.csv
+!results/cloudvps/figures/
+results/cloudvps/figures/*
+!results/cloudvps/figures/*.png
 
 # Local notes and papers
 *.md
 *.pdf
 !README.md
+!results/cloudvps/README.md
