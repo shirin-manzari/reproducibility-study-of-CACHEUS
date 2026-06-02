@@ -150,4 +150,5 @@ results/cloudvps/figures/*
 *.md
 *.pdf
 !README.md
+!PROJECT_DEEP_DIVE.md
 !results/cloudvps/README.md
