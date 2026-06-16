@@ -128,7 +128,6 @@ The simulator handles policy evaluation:
 |-- README.md
 |-- PROJECT_DEEP_DIVE.md
 |-- cloudvps_pipeline.py
-|-- fast21-rodriguez.pdf
 |-- code/
 |   |-- run.py
 |   `-- algs/
@@ -156,6 +155,8 @@ The simulator handles policy evaluation:
 |           `-- visualizinator.py
 |-- data/      ignored local raw input tree
 |-- work/      ignored generated intermediate tree
+|-- presentation/
+|   `-- A Reproducibility Study of CACHEUS.pdf
 `-- results/   generated outputs; curated CloudVPS summaries are tracked
 ```
 
@@ -198,12 +199,12 @@ while others remain available through the lower-level runner.
 
 Shared utility classes.
 
-`fast21-rodriguez.pdf`
+`presentation/A Reproducibility Study of CACHEUS.pdf`
 
-A local PDF copy of the FAST '21 CACHEUS paper, when present. Papers and
-presentation PDFs are useful background for understanding the algorithm family,
-but they are not required by the code path and are usually ignored unless they
-are intentionally force-added.
+The tracked report/presentation PDF for this reproduction. It is useful
+background for readers, but it is not required by the code path. The
+`.gitignore` ignores PDFs by default, so additional papers or local notes are
+not tracked unless intentionally force-added.
 
 ### Runtime and Result Trees
 
@@ -220,6 +221,8 @@ reproducibility summary:
 - `results/cloudvps/summary_by_cache_size.csv`
 - `results/cloudvps/cacheus_vs_baselines.csv`
 - `results/cloudvps/cacheus_delta_summary.csv`
+- `results/cloudvps/cacheus_paired_t_tests.csv`
+- `results/cloudvps/run_metadata.txt`
 - `results/cloudvps/figures/*.png`
 
 In the local experiment workspace, a full run also produced ignored raw outputs
@@ -237,7 +240,7 @@ The local run used:
 
 The README states these prerequisites:
 
-- Python 3 with needed packages already installed.
+- Python 3 with Python packages installed from `requirements.txt`.
 - Linux `blktrace` / `blkparse` installed.
 - Local CloudVPS archives or extracted CloudVPS trace directories.
 
@@ -246,9 +249,22 @@ The code imports these non-stdlib packages:
 - `numpy`, used by algorithms and result statistics.
 - `matplotlib`, used by `cloudvps_pipeline.py` for figures and imported by
   `visualizinator.py`.
+- `scipy`, used by `cloudvps_pipeline.py` for paired t-test statistics.
 
-There is no `requirements.txt`, lockfile, or package metadata in this reduced
-repo.
+The repository includes a small `requirements.txt` for these Python
+dependencies:
+
+```text
+numpy
+matplotlib
+scipy
+```
+
+Install them from the repository root with:
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Data Model
 
@@ -502,7 +518,7 @@ extra columns for the later summaries.
 
 ### Stage 8: Analyze Results
 
-`analyze(rows, out_dir)` creates four CSV summaries.
+`analyze(rows, out_dir)` creates five CSV summaries.
 
 `summary_by_algorithm.csv`
 
@@ -529,24 +545,28 @@ a `cacheus` row, computes hit-rate deltas against every other algorithm.
 Aggregates those deltas by baseline algorithm and cache size, and also includes
 the baseline's overall mean delta.
 
+`cacheus_paired_t_tests.csv`
+
+Uses paired t-tests to compare CACHEUS against each baseline over matched
+trace/cache-size runs. It includes overall comparisons and per-cache-size
+comparisons, reporting mean deltas, standard deviations, t statistics, and
+p-values.
+
 ### Stage 9: Plot Figures
 
 `plot(rows, deltas, out_dir)` uses matplotlib's non-interactive `Agg` backend and
-writes the main pipeline figures:
+writes the tracked pipeline figures:
 
 - `figures/hit_rate_vs_cache_size.png`
 - `figures/cacheus_delta_vs_baselines.png`
 - `figures/runtime_by_algorithm.png`
-
-The curated result artifact set also includes additional presentation/report
-figures generated from the same CSV outputs:
-
 - `figures/mean_hit_rate_bar.png`
 - `figures/hit_rate_heatmap.png`
 - `figures/cacheus_delta_heatmap.png`
 - `figures/runtime_vs_hit_rate.png`
 - `figures/cacheus_vs_lirs.png`
 - `figures/cacheus_delta_boxplot.png`
+- `figures/cacheus_paired_t_tests.png`
 
 The first two figures use a logarithmic x-axis because cache sizes are fractions
 spanning two orders of magnitude.
@@ -1411,6 +1431,24 @@ percentage points:
 By cache size, CACHEUS beats LIRS at `0.001`, `0.005`, `0.01`, and `0.05`, but
 trails LIRS at `0.1` by about `1.704444` percentage points in the current run.
 
+### Paired T-Test Summary
+
+Current `cacheus_paired_t_tests.csv` compares CACHEUS with each baseline over
+matched `(trace file, cache size)` runs. The overall paired tests show
+statistically significant positive CACHEUS deltas against ARC, LeCaR, LFU, and
+LRU, but not against LIRS:
+
+| Baseline | Mean delta pp | t statistic | p value |
+| --- | ---: | ---: | ---: |
+| `arc` | 1.521333 | 4.636634 | 1.20805541e-05 |
+| `lecar` | 2.621111 | 7.021942 | 4.187502281e-10 |
+| `lfu` | 8.029222 | 10.013451 | 3.003580125e-16 |
+| `lirs` | -0.016778 | -0.064843 | 0.9484441148 |
+| `lru` | 5.931556 | 8.955389 | 4.646718601e-14 |
+
+The companion figure, `figures/cacheus_paired_t_tests.png`, plots the overall
+mean deltas with 95% confidence intervals and p-value labels.
+
 ### Runtime Interpretation
 
 The runtime totals reflect Python implementation cost, not just algorithmic
@@ -1521,12 +1559,7 @@ These are not necessarily fatal, but they matter for future maintenance.
 
    Treat it cautiously if using it for comparisons.
 
-7. There are no tests in this reduced repo.
-
-   The generated results demonstrate that the pipeline has run in this checkout,
-   but there is no automated test suite protecting behavior.
-
-8. Generated bytecode exists in the workspace.
+7. Generated bytecode exists in the workspace.
 
    `__pycache__` files are ignored and should not be committed.
 

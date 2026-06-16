@@ -142,6 +142,8 @@ results/cloudvps/*
 !results/cloudvps/summary_by_cache_size.csv
 !results/cloudvps/cacheus_vs_baselines.csv
 !results/cloudvps/cacheus_delta_summary.csv
+!results/cloudvps/cacheus_paired_t_tests.csv
+!results/cloudvps/run_metadata.txt
 !results/cloudvps/figures/
 results/cloudvps/figures/*
 !results/cloudvps/figures/*.png

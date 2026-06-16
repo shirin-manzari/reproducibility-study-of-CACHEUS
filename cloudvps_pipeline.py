@@ -401,6 +401,22 @@ def analyze(rows, out_dir):
         ["baseline_algorithm", "cache_size_label", "cache_size_label_type", "mean_delta_pp", "run_count", "overall_mean_delta_pp"],
         delta_summary,
     )
+    paired_tests = paired_t_tests(deltas)
+    write_dicts(
+        out_dir / "cacheus_paired_t_tests.csv",
+        [
+            "comparison_scope",
+            "baseline_algorithm",
+            "cache_size_label",
+            "cache_size_label_type",
+            "run_count",
+            "mean_delta_pp",
+            "std_delta_pp",
+            "t_statistic",
+            "p_value",
+        ],
+        paired_tests,
+    )
     return deltas
 
 
@@ -432,6 +448,79 @@ def cacheus_deltas(rows):
                 }
             )
     return out
+
+
+def paired_t_tests(deltas):
+    try:
+        from scipy import stats
+    except ImportError as exc:
+        raise PipelineError("scipy is required for paired t-test statistics.") from exc
+
+    def format_p_value(value):
+        return f"{float(value):.10g}"
+
+    def build_row(scope, baseline, label, label_type, items):
+        pairs = []
+        for row in items:
+            cacheus_hit = fnum(row["cacheus_hit_rate"])
+            baseline_hit = fnum(row["baseline_hit_rate"])
+            if cacheus_hit is not None and baseline_hit is not None:
+                pairs.append((cacheus_hit, baseline_hit))
+        if len(pairs) < 2:
+            return None
+
+        cacheus_vals = [pair[0] for pair in pairs]
+        baseline_vals = [pair[1] for pair in pairs]
+        delta_vals = [cacheus - baseline for cacheus, baseline in pairs]
+        result = stats.ttest_rel(cacheus_vals, baseline_vals)
+
+        return {
+            "comparison_scope": scope,
+            "baseline_algorithm": baseline,
+            "cache_size_label": label,
+            "cache_size_label_type": label_type,
+            "run_count": len(pairs),
+            "mean_delta_pp": round(statistics.mean(delta_vals), 6),
+            "std_delta_pp": round(statistics.stdev(delta_vals), 6),
+            "t_statistic": round(float(result.statistic), 6),
+            "p_value": format_p_value(result.pvalue),
+        }
+
+    out = []
+    for (baseline,), items in sorted(grouped(deltas, ["baseline_algorithm"]).items()):
+        row = build_row("overall", baseline, "", "", items)
+        if row:
+            out.append(row)
+
+    size_groups = grouped(deltas, ["baseline_algorithm", "cache_size_label", "cache_size_label_type"])
+    for key, items in sorted(size_groups.items(), key=lambda item: (item[0][0], fnum(item[0][1]) or 0)):
+        baseline, label, label_type = key
+        row = build_row("cache_size", baseline, label, label_type, items)
+        if row:
+            out.append(row)
+    return out
+
+
+def write_run_metadata(out_dir, raw_dir, work_dir, started_at):
+    lines = [
+        "CACHEUS CloudVPS Reproduction Run Metadata",
+        f"started_utc: {started_at.isoformat()}",
+        f"python: {sys.version.split()[0]}",
+        f"platform: {platform.platform()}",
+        f"raw_dir: {shown(raw_dir)}",
+        f"work_dir: {shown(work_dir)}",
+        f"out_dir: {shown(out_dir)}",
+        f"algorithms: {', '.join(ALGORITHMS)}",
+        f"cache_sizes: {', '.join(str(size) for size in CACHE_SIZES)}",
+        f"request_count_type: {REQUEST_COUNT_TYPE}",
+        f"event_filter: {EVENT_FILTER}",
+        "",
+        "Notes:",
+        "- Cache sizes are fractions of each trace's unique expanded page count.",
+        "- Hit rates are percentages.",
+        "- Paired t-tests compare CACHEUS with each baseline on matched trace/cache-size runs.",
+    ]
+    (out_dir / "run_metadata.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def plot(rows, deltas, out_dir):
@@ -472,6 +561,11 @@ def plot(rows, deltas, out_dir):
     plot_runtime_vs_hit_rate(plt, rows, figures / "runtime_vs_hit_rate.png")
     plot_cacheus_vs_lirs(plt, rows, figures / "cacheus_vs_lirs.png")
     plot_cacheus_delta_boxplot(plt, deltas, figures / "cacheus_delta_boxplot.png")
+    plot_paired_t_tests(
+        plt,
+        out_dir / "cacheus_paired_t_tests.csv",
+        figures / "cacheus_paired_t_tests.png",
+    )
 
 
 def plot_lines(plt, rows, keys, value_key, path, ylabel, title, zero_line=False):
@@ -692,8 +786,96 @@ def plot_cacheus_delta_boxplot(plt, deltas, path):
     plt.close(fig)
 
 
+def t_critical_95(df):
+    try:
+        from scipy import stats
+
+        return float(stats.t.ppf(0.975, df))
+    except ImportError:
+        known = {
+            17: 2.109816,
+            89: 1.986979,
+        }
+        return known.get(df, 1.96)
+
+
+def format_p_label(p_value):
+    if p_value < 0.001:
+        return "p < 0.001"
+    return f"p = {p_value:.3f}"
+
+
+def plot_paired_t_tests(plt, paired_tests_csv, path):
+    if not paired_tests_csv.exists():
+        return
+
+    rows = []
+    with paired_tests_csv.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            if row["comparison_scope"] != "overall":
+                continue
+            mean_delta = fnum(row["mean_delta_pp"])
+            std_delta = fnum(row["std_delta_pp"])
+            run_count = int(row["run_count"])
+            p_value = fnum(row["p_value"])
+            if mean_delta is None or std_delta is None or p_value is None or run_count < 2:
+                continue
+            ci_half_width = t_critical_95(run_count - 1) * std_delta / math.sqrt(run_count)
+            rows.append(
+                {
+                    "baseline": row["baseline_algorithm"],
+                    "mean_delta": mean_delta,
+                    "ci_half_width": ci_half_width,
+                    "p_value": p_value,
+                }
+            )
+
+    if not rows:
+        return
+
+    rows.sort(key=lambda row: row["mean_delta"])
+    labels = [row["baseline"] for row in rows]
+    y_positions = list(range(len(rows)))
+    means = [row["mean_delta"] for row in rows]
+    errors = [row["ci_half_width"] for row in rows]
+    colors = ["#2b6cb0" if row["p_value"] < 0.05 else "#718096" for row in rows]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.axvline(0, color="black", linewidth=0.9)
+    ax.errorbar(
+        means,
+        y_positions,
+        xerr=errors,
+        fmt="none",
+        ecolor="#4a5568",
+        elinewidth=1.4,
+        capsize=4,
+        zorder=1,
+    )
+    ax.scatter(means, y_positions, color=colors, s=55, zorder=2)
+
+    x_min = min(mean - error for mean, error in zip(means, errors))
+    x_max = max(mean + error for mean, error in zip(means, errors))
+    span = x_max - x_min or 1
+    label_x = x_max + (span * 0.08)
+    for y, row in zip(y_positions, rows):
+        ax.text(label_x, y, format_p_label(row["p_value"]), va="center", fontsize=9)
+
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(labels)
+    ax.set_xlabel("Mean CACHEUS delta with 95% CI (percentage points)")
+    ax.set_ylabel("Baseline algorithm")
+    ax.set_title("Paired t-test: CACHEUS vs baselines")
+    ax.grid(True, axis="x", linestyle=":", linewidth=0.5)
+    ax.set_xlim(x_min - (span * 0.12), x_max + (span * 0.35))
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def run():
     args = parse_args()
+    started_at = datetime.now(timezone.utc)
     raw_dir = project_path(args.raw_dir)
     work_dir = project_path(args.work_dir)
     out_dir = project_path(args.out_dir)
@@ -705,11 +887,12 @@ def run():
         path.mkdir(parents=True, exist_ok=True)
 
     print("CACHEUS CloudVPS offline reproduction")
-    print(f"Started: {datetime.now(timezone.utc).isoformat()}")
+    print(f"Started: {started_at.isoformat()}")
     print(f"Platform: {platform.platform()}")
     print(f"Raw: {shown(raw_dir)}")
     print(f"Work: {shown(work_dir)}")
     print(f"Output: {shown(out_dir)}")
+    write_run_metadata(out_dir, raw_dir, work_dir, started_at)
 
     targets = prepare_inputs(raw_dir, extracted_dir)
     decoded = decode_traces(targets, decoded_dir)

@@ -1,0 +1,18 @@
+CACHEUS CloudVPS Reproduction Run Metadata
+started_utc: not recorded for the curated tracked run
+python: not recorded for the curated tracked run
+platform: local reproduction environment, exact platform not recorded
+raw_dir: data/cloudvps_raw
+work_dir: work/cloudvps
+out_dir: results/cloudvps
+algorithms: lru, lfu, arc, lirs, lecar, cacheus
+cache_sizes: 0.001, 0.005, 0.01, 0.05, 0.1
+request_count_type: unique
+event_filter: Q
+
+Notes:
+- This metadata describes the curated result artifacts tracked with the repository.
+- Future full pipeline runs regenerate this file with the actual run timestamp, Python version, and platform.
+- Cache sizes are fractions of each trace's unique expanded page count.
+- Hit rates are percentages.
+- Paired t-tests compare CACHEUS with each baseline on matched trace/cache-size runs.

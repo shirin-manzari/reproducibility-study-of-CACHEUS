@@ -32,12 +32,13 @@ tracked in git.
 - Python 3
 - `numpy`
 - `matplotlib`
+- `scipy`
 - `blkparse` from Linux `blktrace` tools
 
 Install Python dependencies:
 
 ```bash
-pip install numpy matplotlib
+pip install -r requirements.txt
 ```
 
 On Debian/Ubuntu:
@@ -77,11 +78,32 @@ Curated results are stored in `results/cloudvps/`, including:
 - `summary_by_cache_size.csv`
 - `cacheus_vs_baselines.csv`
 - `cacheus_delta_summary.csv`
+- `cacheus_paired_t_tests.csv`
 - `conversion_summary.csv`
-- `figures/*.png` for hit-rate, runtime, heatmap, and CACHEUS-vs-baseline plots
+- `run_metadata.txt`
+- `figures/*.png` for hit-rate, runtime, heatmap, CACHEUS-vs-baseline, and
+  paired-test plots
 
 In this CloudVPS-only reproduction, CACHEUS performs strongly against LRU, LFU,
 ARC, and LeCaR, and is nearly tied with LIRS overall.
+
+## Statistical Analysis
+
+CACHEUS is compared with each baseline using paired t-tests over matched
+`(trace file, cache size)` runs. The paired design controls for workload and
+cache-size effects because both algorithms are evaluated on the same trace and
+cache-size setting. The tests use hit-rate differences in percentage points.
+
+The current paired-test results support CACHEUS outperforming LRU, LFU, ARC,
+and LeCaR on average. They do not show a statistically significant difference
+between CACHEUS and LIRS in this CloudVPS-only run.
+
+## Limitations
+
+This repository is a focused CloudVPS reproduction, not a full reproduction of
+every dataset and experiment from the original CACHEUS paper. Raw CloudVPS
+traces, decoded traces, converted `.blk` files, full simulator logs, and local
+work directories are intentionally not tracked in git.
 
 ## References
 
